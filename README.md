@@ -1,4 +1,4 @@
-#Quantum Simulation and the Fermi-Hubbard model
+# Quantum Simulation and the Fermi-Hubbard model
 
 ## Author
   Kaelyn Ferris, 2021 @ Ohio University, Supervised by Dr. Sergio Ulloa
