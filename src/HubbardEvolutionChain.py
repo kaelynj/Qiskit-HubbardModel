@@ -147,4 +147,32 @@ def sys_evolve(nsites, excitations, total_time, dt, hop, U, trotter_steps):
             data[i,t_step] = dat/shots
     return data
 
+#Process and plot data
+'''The procedure here is, for each fermionic mode, add the probability of every state containing
+that mode (at a given time step), and renormalize the data based on the total occupation of each mode.
+Afterwards, plot the data as a function of time step for each mode.'''
+def process_run(num_sites, time_steps, dt, results):
+    proc_data = np.zeros((2*num_sites, time_steps))
+    timesq = np.arange(0.,time_steps*dt, dt)
 
+    #Sum over time steps
+    for t in range(time_steps):
+        #Sum over all possible states of computer
+        for i in range(2**(2*num_sites)):
+            #num = get_bin(i, 2*nsite)
+            num = ''.join( list( reversed(get_bin(i,2*num_sites)) ) )
+            #For each state, check which mode(s) it contains and add them
+            for mode in range(len(num)):
+                if num[mode]=='1':
+                    proc_data[mode,t] += results[i,t]
+    
+        #Renormalize these sums so that the total occupation of the modes is 1
+        norm = 0.0
+        for mode in range(len(num)):
+            norm += proc_data[mode,t]
+        proc_data[:,t] = proc_data[:,t] / norm
+    '''
+    At this point, proc_data is a 2d array containing the occupation 
+    of each mode, for every time step
+    '''
+    return proc_data
