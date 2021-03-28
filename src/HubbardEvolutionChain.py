@@ -7,17 +7,11 @@ from qiskit.tools.jupyter import *
 from qiskit.visualization import *
 import random as rand
 import scipy.linalg as la
-
 provider = IBMQ.load_account()
-
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import numpy as np
-from matplotlib import rcParams
-rcParams['text.usetex'] = True
 
-
-#Useful tool for converting an integer to a binary bit string
+#Function to convert an integer to a binary bit string using "little Endian" encoding
+# where the most significant bit is the first bit
 def get_bin(x, n=0):
     """
     Get the binary representation of x.
@@ -29,10 +23,32 @@ def get_bin(x, n=0):
     #return ''.join(sup)+''.join(sdn)
 
 
-'''The task here is now to define a function which will either update a given circuit with a time-step
-or return a single gate which contains all the necessary components of a time-step'''
 
-#Function to apply a full set of time evolution gates to a given circuit
+#================== qc_evolve ==========================
+'''
+  Function to compute the time evolution operator and append the needed gates to
+   a given circuit.
+    Inputs:
+        -qc (qiskit circuit)
+            Circuit object to append time evolution gates
+        -numsite (int)
+            Number of sites in the one-dimensional chain
+        -time (float)
+            Current time of the evolution to build the operator
+        -hop (float, list)
+            Hopping parameter of the chain.  Can be either float
+               for constant hopping or array describing the hopping
+               across each site.  Length should be numsite-1
+        -U (float, list)
+            Repulsion parameter of the chain.  Can be either float
+               for constant repulsion or array to describe different
+               repulsions for each site
+        -trotter_steps (int)
+            Number of trotter steps used to approximate the time evolution
+               operator
+    Outputs:
+        -None: qc is modified and returned
+'''
 def qc_evolve(qc, numsite, time, hop, U, trotter_steps):
     #Compute angles for the onsite and hopping gates
     # based on the model parameters t, U, and dt
@@ -77,9 +93,37 @@ def qc_evolve(qc, numsite, time, hop, U, trotter_steps):
         qc.measure(i, i)
         
 
-
-#Function to run the circuit and store the counts for an evolution with
-# num_steps number of time steps.
+#================== sys_evolve ==========================
+'''
+  Function to evolve the 1d-chain in time given a set of system parameters and using
+     the qiskit qasm_simulator (will later on add in functionality to set the backend)
+    Inputs:
+       -nsites (int)
+           Number of sites in the chain
+       -excitations (list)
+           List to create initial state of the system.  The encoding here is
+             the first half of the qubits are the spin-up electrons for each site
+             and the second half for the spin-down electrons
+       -total_time (float)
+           Total time to evolve the system (units of inverse energy, 1/hop)
+       -dt (float)
+           Time step to evolve the system with
+        -hop (float, list)
+            Hopping parameter of the chain.  Can be either float
+               for constant hopping or array describing the hopping
+               across each site.  Length should be numsite-1 (list functionality needs to be added)
+        -U (float, list)
+            Repulsion parameter of the chain.  Can be either float
+               for constant repulsion or array to describe different
+               repulsions for each site (list functionality needs to be added)
+        -trotter_steps (int)
+            Number of trotter steps used to approximate the time evolution
+               operator
+    Outputs:
+        -data (2d array of length [2*nsites, time_steps])
+            Output data of the quantum simulation.  Record the normalized counts
+               for each qubit at each time step
+'''
 def sys_evolve(nsites, excitations, total_time, dt, hop, U, trotter_steps):
     #Check for correct data types of input
     if not isinstance(nsites, int):
@@ -147,10 +191,29 @@ def sys_evolve(nsites, excitations, total_time, dt, hop, U, trotter_steps):
             data[i,t_step] = dat/shots
     return data
 
-#Process and plot data
 '''The procedure here is, for each fermionic mode, add the probability of every state containing
 that mode (at a given time step), and renormalize the data based on the total occupation of each mode.
 Afterwards, plot the data as a function of time step for each mode.'''
+#================== process_run ==========================
+'''
+  Function to evolve the 1d-chain in time given a set of system parameters and using
+     the qiskit qasm_simulator (will later on add in functionality to set the backend)
+    Inputs:
+        -num_sites (int)
+           Number of sites in the chain
+        -time_steps (int)
+           Number of time steps in the evolution
+        -dt (float)
+           Time step size (units of inverse energy)
+        -results (output of sys_evolve)
+           List obtained from the sys_evolve function
+    Outputs:
+        -proc_data (2d array of size [2*num_sites, time_steps])
+           Processes the data by mapping the outputs of each qubit
+             into occupation of each fermionic mode of the system.
+             Does this by adding and renormalizing each possible state
+               into a given fermionic mode.
+'''
 def process_run(num_sites, time_steps, dt, results):
     proc_data = np.zeros((2*num_sites, time_steps))
     timesq = np.arange(0.,time_steps*dt, dt)
