@@ -159,10 +159,6 @@ def sys_evolve(nsites, excitations, total_time, dt, hop, U, trotter_steps):
         raise TypeError("Evolution time should be scalar")
     if not np.isscalar(dt):
         raise TypeError("Time step should be scalar")
-    if not np.isscalar(hop):
-        raise TypeError("Hopping term should be scalar")
-    if not np.isscalar(U):
-        raise TypeError("Repulsion term should be scalar")
     if not isinstance(trotter_steps, int):
         raise TypeError("Number of trotter slices should be int")
 
