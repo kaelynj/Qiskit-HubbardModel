@@ -52,9 +52,10 @@ def get_bin(x, n=0):
 def qc_evolve(qc, numsite, time, hop, U, trotter_steps):
     #Compute angles for the onsite and hopping gates
     # based on the model parameters t, U, and dt
-    theta = hop*time/(2*trotter_steps) 
-    phi = U*time/(trotter_steps)
+    #theta = hop*time/(2*trotter_steps) 
+    #phi = U*time/(trotter_steps)
     numq = 2*numsite
+    '''
     y_hop = Operator([[np.cos(theta), 0, 0, -1j*np.sin(theta)],
                 [0, np.cos(theta), 1j*np.sin(theta), 0],
                 [0, 1j*np.sin(theta), np.cos(theta), 0],
@@ -63,16 +64,39 @@ def qc_evolve(qc, numsite, time, hop, U, trotter_steps):
                 [0, np.cos(theta), 1j*np.sin(theta), 0],
                 [0, 1j*np.sin(theta), np.cos(theta), 0],
                 [1j*np.sin(theta), 0, 0, np.cos(theta)]])
+    
     z_onsite = Operator([[1, 0, 0, 0],
                [0, 1, 0, 0],
                [0, 0, 1, 0],
                [0, 0, 0, np.exp(1j*phi)]])
-    
+    '''
+    if np.isscalar(U):
+        U = np.full(numsite, U)
+    if np.isscalar(hop):
+        hop = np.full(numsite, hop)
+    z_onsite = []
+    x_hop = []
+    y_hop = []
+    for i in range(0, numsite):
+        phi = U[i]*time/(trotter_steps)
+        theta = hop[i]*time/(2*trotter_steps) 
+        z_onsite.append( Operator([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, np.exp(1j*phi)]]) )
+        if i < numsite-1:
+        x_hop.append( Operator([[np.cos(theta), 0, 0, 1j*np.sin(theta)],
+                          [0, np.cos(theta), 1j*np.sin(theta), 0],
+                          [0, 1j*np.sin(theta), np.cos(theta), 0],
+                          [1j*np.sin(theta), 0, 0, np.cos(theta)]]) )
+        y_hop.append( Operator([[np.cos(theta), 0, 0, -1j*np.sin(theta)],
+                         [0, np.cos(theta), 1j*np.sin(theta), 0],
+                         [0, 1j*np.sin(theta), np.cos(theta), 0],
+                         [-1j*np.sin(theta), 0, 0, np.cos(theta)]]))
+
+
     #Loop over each time step needed and apply onsite and hopping gates
     for trot in range(trotter_steps):
         #Onsite Terms
         for i in range(0, numsite):
-            qc.unitary(z_onsite, [i,i+numsite], label="Z_Onsite")
+            qc.unitary(z_onsite[i], [i,i+numsite], label="Z_Onsite")
         
             #Add barrier to separate onsite from hopping terms    
             qc.barrier()
@@ -80,14 +104,15 @@ def qc_evolve(qc, numsite, time, hop, U, trotter_steps):
         #Hopping terms
         for i in range(0,numsite-1):
             #Spin-up chain
-            qc.unitary(y_hop, [i,i+1], label="YHop")
-            qc.unitary(x_hop, [i,i+1], label="Xhop")
+            qc.unitary(y_hop[i], [i,i+1], label="YHop")
+            qc.unitary(x_hop[i], [i,i+1], label="Xhop")
             #Spin-down chain
-            qc.unitary(y_hop, [i+numsite, i+1+numsite], label="Xhop")
-            qc.unitary(x_hop, [i+numsite, i+1+numsite], label="Xhop")
+            qc.unitary(y_hop[i], [i+numsite, i+1+numsite], label="Xhop")
+            qc.unitary(x_hop[i], [i+numsite, i+1+numsite], label="Xhop")
 
             #Add barrier after finishing the time step
             qc.barrier()
+    
     #Measure the circuit
     for i in range(numq):
         qc.measure(i, i)
@@ -111,11 +136,11 @@ def qc_evolve(qc, numsite, time, hop, U, trotter_steps):
         -hop (float, list)
             Hopping parameter of the chain.  Can be either float
                for constant hopping or array describing the hopping
-               across each site.  Length should be numsite-1 (list functionality needs to be added)
+               across each site.  Length should be numsite-1 
         -U (float, list)
             Repulsion parameter of the chain.  Can be either float
                for constant repulsion or array to describe different
-               repulsions for each site (list functionality needs to be added)
+               repulsions for each site 
         -trotter_steps (int)
             Number of trotter steps used to approximate the time evolution
                operator
