@@ -43,12 +43,12 @@ def get_hamiltonian(states, t, U):
         for j in range(len(states)):
             psi_j = states[j]
             if j==i:
-                for l in range(0,N):
+                for l in range(0,len(states[0][0])):
                     if psi_i == repel(l,psi_j):
                         H[i,j] = U
                         break
             else:
-                H[i,j] = hop(psi_i, psi_j)
+                H[i,j] = hop(psi_i, psi_j, t)
     return H
 
 #Get list of list of indices to map each of the fermionic modes
@@ -61,24 +61,33 @@ def get_mapping(states):
         for state_index in range(0,len(states)):
             state = states[state_index]
         #Check spin-up modes
-        if i < num_sites:
-            if state[0][i]==1:
-                index_list.append(state_index)
+            if i < num_sites:
+                if state[0][i]==1:
+                    index_list.append(state_index)
         #Check spin-down modes
-        else:
-            if state[1][i-num_sites]==1:
-                index_list.append(state_index)
-    if index_list:
-        mode_list.append(index_list)
-
+            else:
+                if state[1][i-num_sites]==1:
+                    index_list.append(state_index)
+        if index_list:
+            mode_list.append(index_list)
     return mode_list
 
+#Obtain energy given wavefunction and hamiltonian
+def wfk_energy(wfk, hamil):
+    eng = np.dot(np.conj(wfk), np.dot(hamil, wfk))
+    return eng
 
 #Evolve a system with a given set of basis states, initial state, total time, and time step
 def sys_evolve(states, init_wfk, hopping, repulsion, total_time, dt):
     hamiltonian = get_hamiltonian(states, hopping, repulsion)
     t_operator = la.expm(-1j*hamiltonian*dt)
-    excitations = len(states[0][0])
+    excitations = 0
+    for i in range(len(states[0][0])):
+        if states[0][0][i]==1:
+            excitations+=1
+        if states[0][1][i]==1:
+            excitations+=1
+
     mapping = get_mapping(states)
 
     #Initalize system
@@ -86,13 +95,15 @@ def sys_evolve(states, init_wfk, hopping, repulsion, total_time, dt):
     evolve = np.zeros([tsteps, len(init_wfk)])
     mode_evolve = np.zeros([tsteps, len(mapping)])
     wfk = init_wfk
+    energies = np.zeros(tsteps)
 
     #Store first time step in mode_evolve
     for i in range(0, len(mapping)):
         wfk_sum = 0.
-        for j in mapping[i] 
+        for j in mapping[i]: 
             wfk_sum += wfk[j]
         mode_evolve[0][i] = wfk_sum / excitations
+        energies[0] = wfk_energy(wfk, hamiltonian)
 
 
     #Now do time evolution
@@ -100,12 +111,14 @@ def sys_evolve(states, init_wfk, hopping, repulsion, total_time, dt):
     for t in range(1, tsteps):
         wfk = np.dot(t_operator, wfk)
         evolve[t] = np.multiply(np.conj(wfk), wfk)
-        #Store first time step in mode_evolve
+        energies[t] = wfk_energy(wfk, hamiltonian)
         for i in range(0, len(mapping)):
             wfk_sum = 0.
             for j in mapping[i]:
                 wfk_sum += evolve[t][j]
-            mode_evolve[0][i] = wfk_sum / excitations
+            mode_evolve[t][i] = wfk_sum / excitations
 
     #Return time evolution
-    return mode_evolve
+    return mode_evolve, energies
+
+
