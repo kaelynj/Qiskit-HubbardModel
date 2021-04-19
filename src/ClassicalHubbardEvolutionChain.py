@@ -128,9 +128,20 @@ def get_mapping(states):
          -hamil (matrix): Hamiltonian matrix used to find the energy.
 '''#Obtain energy given wavefunction and hamiltonian
 def wfk_energy(wfk, hamil):
-    eng = np.dot(np.conj(wfk), np.dot(hamil, wfk))
+    eng = np.vdot(np.conj(wfk), np.dot(hamil, wfk))
     return eng
 
+
+#====================== get_variance ====================
+'''
+    Compute variance of hamiltonian given a specific wavefunction
+'''
+def get_variance(wfk, h):
+    h_squared = np.matmul(h, h)
+    eng_squared = np.vdot(wfk, np.dot(h_squared, wfk))
+    squared_eng = np.vdot(wfk, np.dot(h, wfk))
+    var = np.sqrt(eng_squared - squared_eng)
+    return var
 
 
 #====================== sys_evolve =====================
@@ -176,7 +187,7 @@ def sys_evolve(states, init_wfk, hopping, repulsion, total_time, dt):
             wfk_sum += wfk[j]
         mode_evolve[0][i] = wfk_sum / excitations
         energies[0] = wfk_energy(wfk, hamiltonian)
-
+        print('Variance: ',get_variance(wfk, hamiltonian) )
 
     #Now do time evolution
     times = np.arange(0., total_time, dt)
@@ -192,5 +203,6 @@ def sys_evolve(states, init_wfk, hopping, repulsion, total_time, dt):
 
     #Return time evolution
     return mode_evolve, energies
+
 
 
