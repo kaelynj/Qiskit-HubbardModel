@@ -1,10 +1,9 @@
 # Importing standard Qiskit libraries and configuring account
 from qiskit import QuantumCircuit, execute, Aer, IBMQ, BasicAer, QuantumRegister, ClassicalRegister
 from qiskit.compiler import transpile, assemble
-from qiskit.quantum_info import Operator
+from qiskit.quantum_info import Operator, DensityMatrix
+import qiskit.quantum_info as qi
 from qiskit.tools.monitor import job_monitor
-from qiskit.tools.jupyter import *
-from qiskit.visualization import *
 import random as rand
 import scipy.linalg as la
 provider = IBMQ.load_account()
@@ -98,7 +97,8 @@ def qc_evolve(qc, numsite, time, hop, U, trotter_steps):
             #Add barrier after finishing the time step
             qc.barrier()
     
-        
+#  circuit_operator = qi.Operator(qc)
+#  return circuit_operator.data
 
 #================== sys_evolve ==========================
 '''
@@ -160,6 +160,7 @@ def sys_evolve(nsites, excitations, total_time, dt, hop, U, trotter_steps):
           #Loop over each excitation 
         for flip in excitations:
             qcirc.x(flip)
+#            qcirc.z(flip)
         #===============================================================
     
         qcirc.barrier()
@@ -261,12 +262,14 @@ def sys_evolve_eng(nsites, excitations, total_time, dt, hop, U, trotter_steps):
         #=========SET YOUR INITIAL STATE==============
           #Loop over each excitation 
         for flip in excitations:
-            qcirc.x(flip)
+           qcirc.x(flip)
+          # qcirc.h(flip)
+           # qcirc.t(flip)
         #===============================================================
     
         qcirc.barrier()
         #Append circuit with Trotter steps needed
-        hc.qc_evolve(qcirc, nsites, t_step*dt, hop, U, trotter_steps)
+        qc_evolve(qcirc, nsites, t_step*dt, hop, U, trotter_steps)
         #Measure the circuit
         for i in range(numq):
             qcirc.measure(i, i)
@@ -323,7 +326,7 @@ def sys_evolve_eng(nsites, excitations, total_time, dt, hop, U, trotter_steps):
             qcirc.x(flip)
         qcirc.barrier()
         #Append circuit with Trotter steps needed
-        hc.qc_evolve(qcirc, nsites, t_step*dt, hop, U, trotter_steps)
+        qc_evolve(qcirc, nsites, t_step*dt, hop, U, trotter_steps)
         even_hopping = measure_hopping(hop, even_pairs, qcirc, numq)
         #===============================================================
         #Now do the same for the odd hoppings
@@ -336,7 +339,7 @@ def sys_evolve_eng(nsites, excitations, total_time, dt, hop, U, trotter_steps):
             qcirc.x(flip)
         qcirc.barrier()
         #Append circuit with Trotter steps needed
-        hc.qc_evolve(qcirc, nsites, t_step*dt, hop, U, trotter_steps)
+        qc_evolve(qcirc, nsites, t_step*dt, hop, U, trotter_steps)
         odd_hopping = measure_hopping(hop, odd_pairs, qcirc, numq)
         
         total_energy = repulsion_energy + even_hopping + odd_hopping
@@ -360,11 +363,13 @@ def sys_evolve_eng(nsites, excitations, total_time, dt, hop, U, trotter_steps):
 '''
 def measure_repulsion(U, num_sites, results, shots):
     repulsion = 0.
-    #Figure out how to include different hoppings later
     for state in results:
+        #Adding in debug print statement
+        #print(state)
         for i in range( int( len(state)/2 ) ):
             if state[i]=='1':
                 if state[i+num_sites]=='1':
+                    print("Measured State: ",state)
                     repulsion += U*results.get(state)/shots
     
     return repulsion
@@ -422,8 +427,8 @@ that mode (at a given time step), and renormalize the data based on the total oc
 Afterwards, plot the data as a function of time step for each mode.'''
 #================== process_run ==========================
 '''
-  Function to evolve the 1d-chain in time given a set of system parameters and using
-     the qiskit qasm_simulator (will later on add in functionality to set the backend)
+  Function to process the data output from sys_evolve or sys_evolve_eng.  Will map each of the possible basis states to
+   each fermionic mode in order to plot the occupation probability as a function of time.
     Inputs:
         -num_sites (int)
            Number of sites in the chain
@@ -465,3 +470,102 @@ def process_run(num_sites, time_steps, dt, results):
     of each mode, for every time step
     '''
     return proc_data
+
+
+
+#================== sys_evolve ==========================
+'''
+  Function to evolve the 1d-chain in time given a set of system parameters and using
+     the qiskit qasm_simulator (will later on add in functionality to set the backend)
+    Inputs:
+       -nsites (int)
+           Number of sites in the chain
+       -excitations (list)
+           List to create initial state of the system.  The encoding here is
+             the first half of the qubits are the spin-up electrons for each site
+             and the second half for the spin-down electrons
+       -total_time (float)
+           Total time to evolve the system (units of inverse energy, 1/hop)
+       -dt (float)
+           Time step to evolve the system with
+        -hop (float, list)
+            Hopping parameter of the chain.  Can be either float
+               for constant hopping or array describing the hopping
+               across each site.  Length should be numsite-1 
+        -U (float, list)
+            Repulsion parameter of the chain.  Can be either float
+               for constant repulsion or array to describe different
+               repulsions for each site 
+        -trotter_steps (int)
+            Number of trotter steps used to approximate the time evolution
+               operator
+    Outputs:
+        -data (2d array of length [2*nsites, time_steps])
+            Output data of the quantum simulation.  Record the normalized counts
+               for each qubit at each time step
+'''
+def sys_evolve_den(nsites, excitations, total_time, dt, hop, U, trotter_steps):
+    #Check for correct data types of input
+    if not isinstance(nsites, int):
+        raise TypeError("Number of sites should be int")
+    if np.isscalar(excitations):
+        raise TypeError("Initial state should be list or numpy array")
+    if not np.isscalar(total_time):
+        raise TypeError("Evolution time should be scalar")
+    if not np.isscalar(dt):
+        raise TypeError("Time step should be scalar")
+    if not isinstance(trotter_steps, int):
+        raise TypeError("Number of trotter slices should be int")
+
+    numq = 2*nsites
+    num_steps = int(total_time/dt)
+    print('Num Steps: ',num_steps)
+    print('Total Time: ', total_time)
+    data = []
+    
+    for t_step in range(0, num_steps):
+        #Create circuit with t_step number of steps
+        q = QuantumRegister(numq)
+        c = ClassicalRegister(numq)
+        qcirc = QuantumCircuit(q,c)
+
+        #=========USE THIS REGION TO SET YOUR INITIAL STATE==============
+          #Loop over each excitation 
+        for flip in excitations:
+           qcirc.x(flip)
+           #qcirc.h(flip)
+#            qcirc.z(flip)
+        #===============================================================
+    
+        qcirc.barrier()
+        #Append circuit with Trotter steps needed
+        qc_evolve(qcirc, nsites, t_step*dt, hop, U, trotter_steps)
+        den_mtrx_obj = DensityMatrix.from_instruction(qcirc)
+        den_mtrx = den_mtrx_obj.to_operator().data
+        state_vector = qi.Statevector.from_instruction(qcirc) 
+        #data.append(state_vector.data)
+        data.append(den_mtrx)
+
+        #Measure the circuit
+        for i in range(numq):
+            qcirc.measure(i, i)
+        ''' 
+    #Choose provider and backend
+        provider = IBMQ.get_provider()
+        #backend = Aer.get_backend('statevector_simulator')
+        backend = Aer.get_backend('qasm_simulator')
+        #backend = provider.get_backend('ibmq_qasm_simulator')
+        #backend = provider.get_backend('ibmqx4')
+        #backend = provider.get_backend('ibmqx2')
+        #backend = provider.get_backend('ibmq_16_melbourne')
+
+        shots = 8192
+        max_credits = 10 #Max number of credits to spend on execution
+        job_exp = execute(qcirc, backend=backend, shots=shots, max_credits=max_credits)
+        job_monitor(job_exp)
+        result = job_exp.result()
+        counts = result.get_counts(qcirc)
+        print(result.get_counts(qcirc))
+        print("Job: ",t_step+1, " of ", num_steps," complete.")
+        '''
+    return data
