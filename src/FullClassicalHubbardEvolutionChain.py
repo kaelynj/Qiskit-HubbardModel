@@ -9,8 +9,8 @@ def get_bin(x, n=0):
     binry = format(x, 'b').zfill(n)
     sup = list( reversed( binry[0:int(len(binry)/2)] ) )
     sdn = list( reversed( binry[int(len(binry)/2):len(binry)] ) )
-    #sup = list(  binry[0:int(len(binry)/2)] ) 
-    #sdn = list(  binry[int(len(binry)/2):len(binry)] ) 
+    #sup = list(  binry[0:int(len(binry)/2)] )
+    #sdn = list(  binry[int(len(binry)/2):len(binry)] )
     return format(x, 'b').zfill(n)
 
 
@@ -24,9 +24,9 @@ def get_states(nsite):
             state_list[0].append(int(state_bin[mode]))
             state_list[1].append(int(state_bin[mode+nsite]))
         states_list.append(state_list)
-    
+
     return states_list
-    
+
 
 
 #====================== repel =====================
@@ -34,7 +34,7 @@ def get_states(nsite):
    Function to check if matrix element H_ii should include U
      Inputs:
          -l (int): index of mode to examine
-         
+
          -state (2d array): state to check if adding U is need
      Outputs:
          -[] or state: Used to compare against another state.  If
@@ -51,7 +51,7 @@ def repel(l,state):
 
 #====================== hop =====================
 '''
-   Function to check if two states are adjacent by a 
+   Function to check if two states are adjacent by a
     single hopping term.  Returns the matrix element H_ij for i!=j
      Inputs:
          -psii (2d array): The state to compare *with* (format here for a state
@@ -95,7 +95,7 @@ def hop(psii, psij, hopping):
         Inputs:
             -states (3d list):  List of 2d arrays which correspond to each state
                 possible within a given state/spin space.  The 1st array of a given
-                state corresponds to the spin-up modes at each site and the 2nd 
+                state corresponds to the spin-up modes at each site and the 2nd
                 corresponds to the spin-down modes at each site.
             -t (float): Hopping energy
             -U (float): Repulsion energy (energies assume hbar=1)
@@ -215,24 +215,24 @@ def sys_evolve(states, init_wfk, hopping, repulsion, total_time, dt):
         norm = 0.
         for j in mapping[i]:
             wfk_sum += evolve[0][j]
-        
+
         mode_evolve[0][i] = wfk_sum
     energies[0] = wfk_energy(wfk, hamiltonian)
     norm = np.sum(mode_evolve[0])
     mode_evolve[0][:] = mode_evolve[0][:] / norm
-        
+
         #print('wfk_sum: ',wfk_sum,'    norm: ',norm)
-        
+
         #print('Variance: ',get_variance(wfk, hamiltonian) )
 #Now do time evolution
     times = np.arange(0., total_time, dt)
     for t in range(1, tsteps):
         # Test out alternative approach
         ################################################
-        t_operator = la.expm(-1j*hamiltonian*t*dt)
-        wfk = np.dot(t_operator, init_wfk)
+        #t_operator = la.expm(-1j*hamiltonian*t*dt)
+        #wfk = np.dot(t_operator, init_wfk)
         ################################################
-        #wfk = np.dot(t_operator, wfk)
+        wfk = np.dot(t_operator, wfk)
 
         wavefunctions.append(np.ndarray.tolist(wfk))
         #evolve[t] = np.multiply(np.conj(wfk), wfk)

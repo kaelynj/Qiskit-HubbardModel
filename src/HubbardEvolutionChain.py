@@ -6,7 +6,6 @@ import qiskit.quantum_info as qi
 from qiskit.tools.monitor import job_monitor
 import random as rand
 import scipy.linalg as la
-provider = IBMQ.load_account()
 import numpy as np
 
 #Function to convert an integer to a binary bit string using "little Endian" encoding
@@ -48,24 +47,59 @@ def get_bin(x, n=0):
     Outputs:
         -None: qc is modified and returned
 '''
-def qc_evolve(qc, numsite, time, hop, U, trotter_steps):
+def qc_evolve(qc, numsite, time, dt, hop, U, trotter_steps):
     #Compute angles for the onsite and hopping gates
     # based on the model parameters t, U, and dt
-    #theta = hop*time/(2*trotter_steps) 
+    #theta = hop*time/(2*trotter_steps)
     #phi = U*time/(trotter_steps)
     numq = 2*numsite
-    if np.isscalar(U):
-        U = np.full(numsite, U)
-    if np.isscalar(hop):
-        hop = np.full(numsite, hop)
+   # if np.isscalar(U):
+   #     U = np.full(numsite, U)
+   # if np.isscalar(hop):
+   #     hop = np.full(numsite, hop)
     z_onsite = []
     x_hop = []
     y_hop = []
+
+    #MODIFIED TO TRY SMALLER TIME STEPS
+    num_steps = int(time/dt)
+    theta = hop*dt/(2*trotter_steps)
+    phi = U*dt/(trotter_steps)
+    z_onsite.append(Operator([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, np.exp(1j*phi)]]))
+    x_hop.append(Operator([[np.cos(theta), 0, 0, 1j*np.sin(theta)],
+            [0, np.cos(theta), 1j*np.sin(theta), 0],
+            [0, 1j*np.sin(theta), np.cos(theta), 0],
+            [1j*np.sin(theta), 0, 0, np.cos(theta)]]))
+    y_hop.append(Operator([[np.cos(theta), 0, 0, -1j*np.sin(theta)],
+            [0, np.cos(theta), 1j*np.sin(theta), 0],
+            [0, 1j*np.sin(theta), np.cos(theta), 0],
+            [-1j*np.sin(theta), 0, 0, np.cos(theta)]]))
+
+    #for step in range(num_steps):
+    for trot in range(trotter_steps):
+
+        #Onsite terms
+        for i in range(0, numsite):
+            qc.unitary(z_onsite[0], [i, i+numsite], label="Z_Onsite")
+        qc.barrier()
+
+        #Hopping terms
+        for i in range(0,numsite-1):
+            #Spin-up chain
+            qc.unitary(y_hop[0], [i,i+1], label="YHop")
+            qc.unitary(x_hop[0], [i,i+1], label="Xhop")
+            #Spin-down chain
+            qc.unitary(y_hop[0], [i+numsite, i+1+numsite], label="Xhop")
+            qc.unitary(x_hop[0], [i+numsite, i+1+numsite], label="Xhop")
+
+        qc.barrier()
+    #=============================================================
+    '''
     for i in range(0, numsite):
         phi = U[i]*time/(trotter_steps)
         z_onsite.append( Operator([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, np.exp(1j*phi)]]) )
         if i < numsite-1:
-            theta = hop[i]*time/(2*trotter_steps) 
+            theta = hop[i]*time/(2*trotter_steps)
             x_hop.append( Operator([[np.cos(theta), 0, 0, 1j*np.sin(theta)],
                           [0, np.cos(theta), 1j*np.sin(theta), 0],
                           [0, 1j*np.sin(theta), np.cos(theta), 0],
@@ -81,8 +115,8 @@ def qc_evolve(qc, numsite, time, hop, U, trotter_steps):
         #Onsite Terms
         for i in range(0, numsite):
             qc.unitary(z_onsite[i], [i,i+numsite], label="Z_Onsite")
-        
-            #Add barrier to separate onsite from hopping terms    
+
+            #Add barrier to separate onsite from hopping terms
             qc.barrier()
 
         #Hopping terms
@@ -96,7 +130,8 @@ def qc_evolve(qc, numsite, time, hop, U, trotter_steps):
 
             #Add barrier after finishing the time step
             qc.barrier()
-    
+
+      '''
 #  circuit_operator = qi.Operator(qc)
 #  return circuit_operator.data
 
@@ -118,11 +153,11 @@ def qc_evolve(qc, numsite, time, hop, U, trotter_steps):
         -hop (float, list)
             Hopping parameter of the chain.  Can be either float
                for constant hopping or array describing the hopping
-               across each site.  Length should be numsite-1 
+               across each site.  Length should be numsite-1
         -U (float, list)
             Repulsion parameter of the chain.  Can be either float
                for constant repulsion or array to describe different
-               repulsions for each site 
+               repulsions for each site
         -trotter_steps (int)
             Number of trotter steps used to approximate the time evolution
                operator
@@ -149,7 +184,7 @@ def sys_evolve(nsites, excitations, total_time, dt, hop, U, trotter_steps):
     print('Num Steps: ',num_steps)
     print('Total Time: ', total_time)
     data = np.zeros((2**numq, num_steps))
-    
+
     for t_step in range(0, num_steps):
         #Create circuit with t_step number of steps
         q = QuantumRegister(numq)
@@ -157,21 +192,21 @@ def sys_evolve(nsites, excitations, total_time, dt, hop, U, trotter_steps):
         qcirc = QuantumCircuit(q,c)
 
         #=========USE THIS REGION TO SET YOUR INITIAL STATE==============
-          #Loop over each excitation 
+          #Loop over each excitation
         for flip in excitations:
             qcirc.x(flip)
 #            qcirc.z(flip)
         #===============================================================
-    
+
         qcirc.barrier()
         #Append circuit with Trotter steps needed
-        qc_evolve(qcirc, nsites, t_step*dt, hop, U, trotter_steps)
+        qc_evolve(qcirc, nsites, t_step*dt, dt, hop, U, trotter_steps)
         #Measure the circuit
         for i in range(numq):
             qcirc.measure(i, i)
-    
+
     #Choose provider and backend
-        provider = IBMQ.get_provider()
+        #provider = IBMQ.get_provider()
         #backend = Aer.get_backend('statevector_simulator')
         backend = Aer.get_backend('qasm_simulator')
         #backend = provider.get_backend('ibmq_qasm_simulator')
@@ -187,7 +222,7 @@ def sys_evolve(nsites, excitations, total_time, dt, hop, U, trotter_steps):
         counts = result.get_counts(qcirc)
         print(result.get_counts(qcirc))
         print("Job: ",t_step+1, " of ", num_steps," complete.")
-    
+
     #Store results in data array and normalize them
         for i in range(2**numq):
             if counts.get(get_bin(i,numq)) is None:
@@ -217,11 +252,11 @@ def sys_evolve(nsites, excitations, total_time, dt, hop, U, trotter_steps):
         -hop (float, list)
             Hopping parameter of the chain.  Can be either float
                for constant hopping or array describing the hopping
-               across each site.  Length should be numsite-1 
+               across each site.  Length should be numsite-1
         -U (float, list)
             Repulsion parameter of the chain.  Can be either float
                for constant repulsion or array to describe different
-               repulsions for each site 
+               repulsions for each site
         -trotter_steps (int)
             Number of trotter steps used to approximate the time evolution
                operator
@@ -252,7 +287,7 @@ def sys_evolve_eng(nsites, excitations, total_time, dt, hop, U, trotter_steps):
     print('Total Time: ', total_time)
     data = np.zeros((2**numq, num_steps))
     energies = np.zeros(num_steps)
-    
+
     for t_step in range(0, num_steps):
         #Create circuit with t_step number of steps
         q = QuantumRegister(numq)
@@ -260,22 +295,22 @@ def sys_evolve_eng(nsites, excitations, total_time, dt, hop, U, trotter_steps):
         qcirc = QuantumCircuit(q,c)
 
         #=========SET YOUR INITIAL STATE==============
-          #Loop over each excitation 
+          #Loop over each excitation
         for flip in excitations:
            qcirc.x(flip)
           # qcirc.h(flip)
            # qcirc.t(flip)
         #===============================================================
-    
+
         qcirc.barrier()
         #Append circuit with Trotter steps needed
-        qc_evolve(qcirc, nsites, t_step*dt, hop, U, trotter_steps)
+        qc_evolve(qcirc, nsites, t_step*dt, dt, hop, U, trotter_steps)
         #Measure the circuit
         for i in range(numq):
             qcirc.measure(i, i)
-    
+
     #Choose provider and backend
-        provider = IBMQ.get_provider()
+        #provider = IBMQ.get_provider()
         #backend = Aer.get_backend('statevector_simulator')
         backend = Aer.get_backend('qasm_simulator')
         #backend = provider.get_backend('ibmq_qasm_simulator')
@@ -290,7 +325,7 @@ def sys_evolve_eng(nsites, excitations, total_time, dt, hop, U, trotter_steps):
         counts = result.get_counts(qcirc)
         #print(result.get_counts(qcirc))
         print("Job: ",t_step+1, " of ", num_steps," computing energy...")
-    
+
     #Store results in data array and normalize them
         for i in range(2**numq):
             if counts.get(get_bin(i,numq)) is None:
@@ -298,12 +333,12 @@ def sys_evolve_eng(nsites, excitations, total_time, dt, hop, U, trotter_steps):
             else:
                 dat = counts.get(get_bin(i,numq))
             data[i,t_step] = dat/shots
-            
+
     #=======================================================
         #Compute energy of system
         #Compute repulsion energies
         repulsion_energy = measure_repulsion(U, nsites, counts, shots)
-        
+
         #Compute hopping energies
         #Get list of hopping pairs
         even_pairs = []
@@ -316,17 +351,17 @@ def sys_evolve_eng(nsites, excitations, total_time, dt, hop, U, trotter_steps):
         for i in range(1,nsites-1,2):
             odd_pairs.append([i, i+1])
             odd_pairs.append([i+nsites, i+nsites+1])
-        
+
         #Start with even hoppings, initialize circuit and find hopping pairs
         q = QuantumRegister(numq)
         c = ClassicalRegister(numq)
         qcirc = QuantumCircuit(q,c)
-          #Loop over each excitation 
+          #Loop over each excitation
         for flip in excitations:
             qcirc.x(flip)
         qcirc.barrier()
         #Append circuit with Trotter steps needed
-        qc_evolve(qcirc, nsites, t_step*dt, hop, U, trotter_steps)
+        qc_evolve(qcirc, nsites, t_step*dt, dt, hop, U, trotter_steps)
         even_hopping = measure_hopping(hop, even_pairs, qcirc, numq)
         #===============================================================
         #Now do the same for the odd hoppings
@@ -334,14 +369,14 @@ def sys_evolve_eng(nsites, excitations, total_time, dt, hop, U, trotter_steps):
         q = QuantumRegister(numq)
         c = ClassicalRegister(numq)
         qcirc = QuantumCircuit(q,c)
-          #Loop over each excitation 
+          #Loop over each excitation
         for flip in excitations:
             qcirc.x(flip)
         qcirc.barrier()
         #Append circuit with Trotter steps needed
-        qc_evolve(qcirc, nsites, t_step*dt, hop, U, trotter_steps)
+        qc_evolve(qcirc, nsites, t_step*dt, dt, hop, U, trotter_steps)
         odd_hopping = measure_hopping(hop, odd_pairs, qcirc, numq)
-        
+
         total_energy = repulsion_energy + even_hopping + odd_hopping
         energies[t_step] = total_energy
         print("Total Energy is: ", total_energy)
@@ -371,10 +406,10 @@ def measure_repulsion(U, num_sites, results, shots):
                 if state[i+num_sites]=='1':
                     print("Measured State: ",state)
                     repulsion += U*results.get(state)/shots
-    
+
     return repulsion
-                    
-        
+
+
 
 #================== measure_hopping =========================
 '''
@@ -388,7 +423,7 @@ def measure_repulsion(U, num_sites, results, shots):
             -num_qubits (int): Number of qubits
 
         Outputs:
-            -hop_eng (floats): Hopping energy at a given time step 
+            -hop_eng (floats): Hopping energy at a given time step
 '''
 def measure_hopping(hopping, pairs, circuit, num_qubits):
     #Add diagonalizing circuit
@@ -459,14 +494,14 @@ def process_run(num_sites, time_steps, dt, results):
             for mode in range(len(num)):
                 if num[mode]=='1':
                     proc_data[mode,t] += results[i,t]
-    
+
         #Renormalize these sums so that the total occupation of the modes is 1
         norm = 0.0
         for mode in range(len(num)):
             norm += proc_data[mode,t]
         proc_data[:,t] = proc_data[:,t] / norm
     '''
-    At this point, proc_data is a 2d array containing the occupation 
+    At this point, proc_data is a 2d array containing the occupation
     of each mode, for every time step
     '''
     return proc_data
@@ -491,11 +526,11 @@ def process_run(num_sites, time_steps, dt, results):
         -hop (float, list)
             Hopping parameter of the chain.  Can be either float
                for constant hopping or array describing the hopping
-               across each site.  Length should be numsite-1 
+               across each site.  Length should be numsite-1
         -U (float, list)
             Repulsion parameter of the chain.  Can be either float
                for constant repulsion or array to describe different
-               repulsions for each site 
+               repulsions for each site
         -trotter_steps (int)
             Number of trotter steps used to approximate the time evolution
                operator
@@ -522,7 +557,7 @@ def sys_evolve_den(nsites, excitations, total_time, dt, hop, U, trotter_steps):
     print('Num Steps: ',num_steps)
     print('Total Time: ', total_time)
     data = []
-    
+
     for t_step in range(0, num_steps):
         #Create circuit with t_step number of steps
         q = QuantumRegister(numq)
@@ -530,26 +565,26 @@ def sys_evolve_den(nsites, excitations, total_time, dt, hop, U, trotter_steps):
         qcirc = QuantumCircuit(q,c)
 
         #=========USE THIS REGION TO SET YOUR INITIAL STATE==============
-          #Loop over each excitation 
+          #Loop over each excitation
         for flip in excitations:
            qcirc.x(flip)
            #qcirc.h(flip)
 #            qcirc.z(flip)
         #===============================================================
-    
+
         qcirc.barrier()
         #Append circuit with Trotter steps needed
-        qc_evolve(qcirc, nsites, t_step*dt, hop, U, trotter_steps)
+        qc_evolve(qcirc, nsites, t_step*dt, dt, hop, U, trotter_steps)
         den_mtrx_obj = DensityMatrix.from_instruction(qcirc)
         den_mtrx = den_mtrx_obj.to_operator().data
-        state_vector = qi.Statevector.from_instruction(qcirc) 
+        state_vector = qi.Statevector.from_instruction(qcirc)
         #data.append(state_vector.data)
         data.append(den_mtrx)
 
         #Measure the circuit
         for i in range(numq):
             qcirc.measure(i, i)
-        ''' 
+        '''
     #Choose provider and backend
         provider = IBMQ.get_provider()
         #backend = Aer.get_backend('statevector_simulator')
